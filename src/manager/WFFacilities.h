@@ -35,22 +35,6 @@ public:
 	template<class FUNC, class... ARGS>
 	static void go(const std::string& queue_name, FUNC&& func, ARGS&&... args);
 
-public:
-	template<class RESP>
-	struct WFNetworkResult
-	{
-		RESP resp;
-		long long seqid;
-		int task_state;
-		int task_error;
-	};
-
-	template<class REQ, class RESP>
-	static WFNetworkResult<RESP> request(enum TransportType type, const std::string& url, REQ&& req, int retry_max);
-
-	template<class REQ, class RESP>
-	static WFFuture<WFNetworkResult<RESP>> async_request(enum TransportType type, const std::string& url, REQ&& req, int retry_max);
-
 public:// async fileIO
 	static WFFuture<ssize_t> async_pread(int fd, void *buf, size_t count, off_t offset);
 	static WFFuture<ssize_t> async_pwrite(int fd, const void *buf, size_t count, off_t offset);

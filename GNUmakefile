@@ -1,5 +1,5 @@
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-ALL_TARGETS := all base check install preinstall clean tutorial
+ALL_TARGETS := all base check install preinstall clean
 MAKE_FILE := Makefile
 
 DEFAULT_BUILD_DIR := build.cmake
@@ -15,15 +15,12 @@ base:
 	mkdir -p $(BUILD_DIR)
 
 ifeq ($(DEBUG),y)
-	cd $(BUILD_DIR) && $(CMAKE3) -D CMAKE_BUILD_TYPE=Debug -D CONSUL=$(CONSUL) -D KAFKA=$(KAFKA) -D MYSQL=$(MYSQL) -D REDIS=$(REDIS) -D UPSTREAM=$(UPSTREAM) $(ROOT_DIR)
+	cd $(BUILD_DIR) && $(CMAKE3) -D CMAKE_BUILD_TYPE=Debug  $(ROOT_DIR)
 else ifneq ("${INSTALL_PREFIX}install_prefix", "install_prefix")
-	cd $(BUILD_DIR) && $(CMAKE3) -DCMAKE_INSTALL_PREFIX:STRING=${INSTALL_PREFIX} -D CONSUL=$(CONSUL) -D KAFKA=$(KAFKA) -D MYSQL=$(MYSQL) -D REDIS=$(REDIS) -D UPSTREAM=$(UPSTREAM) $(ROOT_DIR)
+	cd $(BUILD_DIR) && $(CMAKE3) -DCMAKE_INSTALL_PREFIX:STRING=${INSTALL_PREFIX}  $(ROOT_DIR)
 else
-	cd $(BUILD_DIR) && $(CMAKE3) -D CONSUL=$(CONSUL) -D KAFKA=$(KAFKA) -D MYSQL=$(MYSQL) -D REDIS=$(REDIS) -D UPSTREAM=$(UPSTREAM) $(ROOT_DIR)
+	cd $(BUILD_DIR) && $(CMAKE3)  $(ROOT_DIR)
 endif
-
-tutorial: all
-	make -C tutorial
 
 check: all
 	make -C test check
@@ -35,7 +32,6 @@ install preinstall: base
 
 clean:
 	-make -C test clean
-	-make -C tutorial clean
 	rm -rf $(DEFAULT_BUILD_DIR)
 	rm -rf _include
 	rm -rf _lib

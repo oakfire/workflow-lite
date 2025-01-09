@@ -37,16 +37,9 @@ endif ()
 set(TEST_LIST
 	task_unittest
 	algo_unittest
-	http_unittest
-	redis_unittest
-	mysql_unittest
 	facilities_unittest
 	graph_unittest
-	memory_unittest
-	upstream_unittest
-	dns_unittest
 	resource_unittest
-	uriparser_unittest
 )
 
 if (APPLE)

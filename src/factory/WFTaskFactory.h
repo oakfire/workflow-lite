@@ -25,33 +25,9 @@
 #include <time.h>
 #include <utility>
 #include <functional>
-#include "URIParser.h"
-#include "RedisMessage.h"
-#include "HttpMessage.h"
-#include "MySQLMessage.h"
-#include "DnsMessage.h"
 #include "Workflow.h"
 #include "WFTask.h"
 #include "WFGraphTask.h"
-#include "EndpointParams.h"
-
-// Network Client/Server tasks
-
-using WFHttpTask = WFNetworkTask<protocol::HttpRequest,
-								 protocol::HttpResponse>;
-using http_callback_t = std::function<void (WFHttpTask *)>;
-
-using WFRedisTask = WFNetworkTask<protocol::RedisRequest,
-								  protocol::RedisResponse>;
-using redis_callback_t = std::function<void (WFRedisTask *)>;
-
-using WFMySQLTask = WFNetworkTask<protocol::MySQLRequest,
-								  protocol::MySQLResponse>;
-using mysql_callback_t = std::function<void (WFMySQLTask *)>;
-
-using WFDnsTask = WFNetworkTask<protocol::DnsRequest,
-								protocol::DnsResponse>;
-using dns_callback_t = std::function<void (WFDnsTask *)>;
 
 // File IO tasks
 
@@ -108,52 +84,6 @@ using module_callback_t = std::function<void (const WFModuleTask *)>;
 
 class WFTaskFactory
 {
-public:
-	static WFHttpTask *create_http_task(const std::string& url,
-										int redirect_max,
-										int retry_max,
-										http_callback_t callback);
-
-	static WFHttpTask *create_http_task(const ParsedURI& uri,
-										int redirect_max,
-										int retry_max,
-										http_callback_t callback);
-
-	static WFHttpTask *create_http_task(const std::string& url,
-										const std::string& proxy_url,
-										int redirect_max,
-										int retry_max,
-										http_callback_t callback);
-
-	static WFHttpTask *create_http_task(const ParsedURI& uri,
-										const ParsedURI& proxy_uri,
-										int redirect_max,
-										int retry_max,
-										http_callback_t callback);
-
-	static WFRedisTask *create_redis_task(const std::string& url,
-										  int retry_max,
-										  redis_callback_t callback);
-
-	static WFRedisTask *create_redis_task(const ParsedURI& uri,
-										  int retry_max,
-										  redis_callback_t callback);
-
-	static WFMySQLTask *create_mysql_task(const std::string& url,
-										  int retry_max,
-										  mysql_callback_t callback);
-
-	static WFMySQLTask *create_mysql_task(const ParsedURI& uri,
-										  int retry_max,
-										  mysql_callback_t callback);
-
-	static WFDnsTask *create_dns_task(const std::string& url,
-									  int retry_max,
-									  dns_callback_t callback);
-
-	static WFDnsTask *create_dns_task(const ParsedURI& uri,
-									  int retry_max,
-									  dns_callback_t callback);
 
 public:
 	static WFFileIOTask *create_pread_task(int fd,
@@ -408,40 +338,6 @@ public:
 		task->sub_series()->set_last_task(last);
 		return task;
 	}
-};
-
-template<class REQ, class RESP>
-class WFNetworkTaskFactory
-{
-private:
-	using T = WFNetworkTask<REQ, RESP>;
-
-public:
-	static T *create_client_task(enum TransportType type,
-								 const std::string& host,
-								 unsigned short port,
-								 int retry_max,
-								 std::function<void (T *)> callback);
-
-	static T *create_client_task(enum TransportType type,
-								 const std::string& url,
-								 int retry_max,
-								 std::function<void (T *)> callback);
-
-	static T *create_client_task(enum TransportType type,
-								 const ParsedURI& uri,
-								 int retry_max,
-								 std::function<void (T *)> callback);
-
-	static T *create_client_task(enum TransportType type,
-								 const struct sockaddr *addr,
-								 socklen_t addrlen,
-								 int retry_max,
-								 std::function<void (T *)> callback);
-
-public:
-	static T *create_server_task(CommService *service,
-								 std::function<void (T *)>& process);
 };
 
 template<class INPUT, class OUTPUT>

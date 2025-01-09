@@ -26,13 +26,8 @@
 
 #include <string>
 #include "CommScheduler.h"
-#include "DnsCache.h"
-#include "RouteManager.h"
 #include "Executor.h"
-#include "EndpointParams.h"
 #include "WFResourcePool.h"
-#include "WFNameService.h"
-#include "WFDnsResolver.h"
 
 /**
  * @file    WFGlobal.h
@@ -46,8 +41,6 @@
 */
 struct WFGlobalSettings
 {
-	struct EndpointParams endpoint_params;
-	struct EndpointParams dns_server_params;
 	unsigned int dns_ttl_default;	///< in seconds, DNS TTL when network request success
 	unsigned int dns_ttl_min;		///< in seconds, DNS TTL when network request fail
 	int dns_threads;
@@ -64,8 +57,6 @@ struct WFGlobalSettings
  */
 static constexpr struct WFGlobalSettings GLOBAL_SETTINGS_DEFAULT =
 {
-	.endpoint_params	=	ENDPOINT_PARAMS_DEFAULT,
-	.dns_server_params	=	ENDPOINT_PARAMS_DEFAULT,
 	.dns_ttl_default	=	3600,
 	.dns_ttl_min		=	60,
 	.dns_threads		=	4,
@@ -90,22 +81,7 @@ extern void WORKFLOW_library_init(const struct WFGlobalSettings *settings);
 class WFGlobal
 {
 public:
-	/**
-	 * @brief      register default port for one scheme string
-	 * @param[in]  scheme           scheme string
-	 * @param[in]  port             default port value
-	 * @warning    No effect when scheme is "http"/"https"/"redis"/"rediss"/"mysql"/"kafka"
-	 */
-	static void register_scheme_port(const std::string& scheme,
-									 unsigned short port);
-	/**
-	 * @brief      get default port string for one scheme string
-	 * @param[in]  scheme           scheme string
-	 * @return     port string const pointer
-	 * @retval     NULL             fail, scheme not found
-	 * @retval     not NULL         success
-	 */
-	static const char *get_default_port(const std::string& scheme);
+
 	/**
 	 * @brief      get current global settings
 	 * @return     current global settings const pointer
@@ -150,30 +126,6 @@ public:
 	static class ExecQueue *get_exec_queue(const std::string& queue_name);
 	static class Executor *get_compute_executor();
 	static class IOService *get_io_service();
-	static class ExecQueue *get_dns_queue();
-	static class Executor *get_dns_executor();
-	static class WFDnsClient *get_dns_client();
-	static class WFResourcePool *get_dns_respool();
-
-	static class RouteManager *get_route_manager()
-	{
-		return &route_manager_;
-	}
-
-	static class DnsCache *get_dns_cache()
-	{
-		return &dns_cache_;
-	}
-
-	static class WFDnsResolver *get_dns_resolver()
-	{
-		return &dns_resolver_;
-	}
-
-	static class WFNameService *get_name_service()
-	{
-		return &name_service_;
-	}
 
 public:
 	static int sync_operation_begin();
@@ -181,10 +133,7 @@ public:
 
 private:
 	static struct WFGlobalSettings settings_;
-	static RouteManager route_manager_;
-	static DnsCache dns_cache_;
-	static WFDnsResolver dns_resolver_;
-	static WFNameService name_service_;
+
 };
 
 #endif

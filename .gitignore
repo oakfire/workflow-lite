@@ -47,3 +47,6 @@ workflow-config.cmake
 .xmake
 build.xmake
 _include
+
+# cmake
+build.cmake

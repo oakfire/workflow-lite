@@ -33,9 +33,7 @@
 #include "Executor.h"
 #include "WFResourcePool.h"
 #include "WFTaskError.h"
-#include "WFDnsClient.h"
 #include "WFGlobal.h"
-#include "URIParser.h"
 
 class __WFGlobal
 {
@@ -44,31 +42,6 @@ public:
 	{
 		static __WFGlobal kInstance;
 		return &kInstance;
-	}
-
-	const char *get_default_port(const std::string& scheme)
-	{
-		const auto it = static_scheme_port_.find(scheme);
-
-		if (it != static_scheme_port_.end())
-			return it->second;
-
-		const char *port = NULL;
-		user_scheme_port_mutex_.lock();
-		const auto it2 = user_scheme_port_.find(scheme);
-
-		if (it2 != user_scheme_port_.end())
-			port = it2->second.c_str();
-
-		user_scheme_port_mutex_.unlock();
-		return port;
-	}
-
-	void register_scheme_port(const std::string& scheme, unsigned short port)
-	{
-		user_scheme_port_mutex_.lock();
-		user_scheme_port_[scheme] = std::to_string(port);
-		user_scheme_port_mutex_.unlock();
 	}
 
 	void sync_operation_begin()
@@ -108,9 +81,6 @@ private:
 	__WFGlobal();
 
 private:
-	std::unordered_map<std::string, const char *> static_scheme_port_;
-	std::unordered_map<std::string, std::string> user_scheme_port_;
-	std::mutex user_scheme_port_mutex_;
 	std::mutex sync_mutex_;
 	int sync_count_;
 	int sync_max_;
@@ -118,28 +88,6 @@ private:
 
 __WFGlobal::__WFGlobal()
 {
-	static_scheme_port_["dns"] = "53";
-	static_scheme_port_["Dns"] = "53";
-	static_scheme_port_["DNS"] = "53";
-
-	static_scheme_port_["http"] = "80";
-	static_scheme_port_["Http"] = "80";
-	static_scheme_port_["HTTP"] = "80";
-
-	static_scheme_port_["redis"] = "6379";
-	static_scheme_port_["Redis"] = "6379";
-	static_scheme_port_["REDIS"] = "6379";
-
-	static_scheme_port_["mysql"] = "3306";
-	static_scheme_port_["Mysql"] = "3306";
-	static_scheme_port_["MySql"] = "3306";
-	static_scheme_port_["MySQL"] = "3306";
-	static_scheme_port_["MYSQL"] = "3306";
-
-	static_scheme_port_["kafka"] = "9092";
-	static_scheme_port_["Kafka"] = "9092";
-	static_scheme_port_["KAFKA"] = "9092";
-
 	sync_count_ = 0;
 	sync_max_ = 0;
 }
@@ -194,42 +142,6 @@ private:
 	std::mutex mutex_;
 	std::condition_variable cond_;
 	bool flag_;
-};
-
-class __ThreadDnsManager
-{
-public:
-	static __ThreadDnsManager *get_instance()
-	{
-		static __ThreadDnsManager kInstance;
-		return &kInstance;
-	}
-
-	ExecQueue *get_dns_queue() { return &dns_queue_; }
-	Executor *get_dns_executor() { return &dns_executor_; }
-
-	__ThreadDnsManager()
-	{
-		int ret;
-
-		ret = dns_queue_.init();
-		if (ret < 0)
-			abort();
-
-		ret = dns_executor_.init(WFGlobal::get_global_settings()->dns_threads);
-		if (ret < 0)
-			abort();
-	}
-
-	~__ThreadDnsManager()
-	{
-		dns_executor_.deinit();
-		dns_queue_.deinit();
-	}
-
-private:
-	ExecQueue dns_queue_;
-	Executor dns_executor_;
 };
 
 class __CommManager
@@ -386,205 +298,7 @@ inline ExecQueue *__ExecManager::get_exec_queue(const std::string& queue_name)
 	return queue;
 }
 
-static std::string __dns_server_url(const std::string& url,
-									const struct addrinfo *hints)
-{
-	std::string host;
-	ParsedURI uri;
-	struct addrinfo *res;
-	struct in6_addr buf;
-
-	if (strncasecmp(url.c_str(), "dns://", 6) == 0 ||
-		strncasecmp(url.c_str(), "dnss://", 7) == 0)
-	{
-		host = url;
-	}
-	else if (inet_pton(AF_INET6, url.c_str(), &buf) > 0)
-		host = "dns://[" + url + "]";
-	else
-		host = "dns://" + url;
-
-	if (URIParser::parse(host, uri) == 0 && uri.host && uri.host[0])
-	{
-		if (getaddrinfo(uri.host, "53", hints, &res) == 0)
-		{
-			freeaddrinfo(res);
-			return host;
-		}
-	}
-
-	return "";
-}
-
-static void __split_merge_str(const char *p, bool is_nameserver,
-							  const struct addrinfo *hints,
-							  std::string& result)
-{
-	const char *start;
-
-	if (!isspace(*p))
-		return;
-
-	while (1)
-	{
-		while (isspace(*p))
-			p++;
-
-		start = p;
-		while (*p && *p != '#' && *p != ';' && !isspace(*p))
-			p++;
-
-		if (start == p)
-			break;
-
-		std::string str(start, p);
-		if (is_nameserver)
-			str = __dns_server_url(str, hints);
-
-		if (!str.empty())
-		{
-			if (!result.empty())
-				result.push_back(',');
-
-			result.append(str);
-		}
-	}
-}
-
-static inline const char *__try_options(const char *p, const char *q,
-										const char *r)
-{
-	size_t len = strlen(r);
-	if ((size_t)(q - p) >= len && strncmp(p, r, len) == 0)
-		return p + len;
-	return NULL;
-}
-
-static void __set_options(const char *p,
-						  int *ndots, int *attempts, bool *rotate)
-{
-	const char *start;
-	const char *opt;
-
-	if (!isspace(*p))
-		return;
-
-	while (1)
-	{
-		while (isspace(*p))
-			p++;
-
-		start = p;
-		while (*p && *p != '#' && *p != ';' && !isspace(*p))
-			p++;
-
-		if (start == p)
-			break;
-
-		if ((opt = __try_options(start, p, "ndots:")) != NULL)
-			*ndots = atoi(opt);
-		else if ((opt = __try_options(start, p, "attempts:")) != NULL)
-			*attempts = atoi(opt);
-		else if ((opt = __try_options(start, p, "rotate")) != NULL)
-			*rotate = true;
-	}
-}
-
-static int __parse_resolv_conf(const char *path,
-							   std::string& url, std::string& search_list,
-							   int *ndots, int *attempts, bool *rotate)
-{
-	size_t bufsize = 0;
-	char *line = NULL;
-	FILE *fp;
-	int ret;
-
-	fp = fopen(path, "r");
-	if (!fp)
-		return -1;
-
-	const struct WFGlobalSettings *settings = WFGlobal::get_global_settings();
-	struct addrinfo hints = {
-		.ai_flags		=	AI_ADDRCONFIG | AI_NUMERICHOST | AI_NUMERICSERV,
-		.ai_family		=	settings->dns_server_params.address_family,
-		.ai_socktype	=	SOCK_STREAM,
-	};
-
-	while ((ret = getline(&line, &bufsize, fp)) > 0)
-	{
-		if (strncmp(line, "nameserver", 10) == 0)
-			__split_merge_str(line + 10, true, &hints, url);
-		else if (strncmp(line, "search", 6) == 0)
-			__split_merge_str(line + 6, false, &hints, search_list);
-		else if (strncmp(line, "options", 7) == 0)
-			__set_options(line + 7, ndots, attempts, rotate);
-	}
-
-	ret = ferror(fp) ? -1 : 0;
-	free(line);
-	fclose(fp);
-	return ret;
-}
-
-class __DnsClientManager
-{
-public:
-	static __DnsClientManager *get_instance()
-	{
-		static __DnsClientManager kInstance;
-		return &kInstance;
-	}
-
-public:
-	WFDnsClient *get_dns_client() { return client_; }
-	WFResourcePool *get_dns_respool() { return &respool_; };
-
-private:
-	__DnsClientManager() : respool_(WFGlobal::get_global_settings()->
-									dns_server_params.max_connections)
-	{
-		const char *path = WFGlobal::get_global_settings()->resolv_conf_path;
-
-		client_ = NULL;
-		if (path && path[0])
-		{
-			int ndots = 1;
-			int attempts = 2;
-			bool rotate = false;
-			std::string url;
-			std::string search;
-
-			__parse_resolv_conf(path, url, search, &ndots, &attempts, &rotate);
-			if (url.size() == 0)
-				url = "8.8.8.8";
-
-			client_ = new WFDnsClient;
-			if (client_->init(url, search, ndots, attempts, rotate) >= 0)
-				return;
-
-			delete client_;
-			client_ = NULL;
-		}
-	}
-
-	~__DnsClientManager()
-	{
-		if (client_)
-		{
-			client_->deinit();
-			delete client_;
-		}
-	}
-
-	WFDnsClient *client_;
-	WFResourcePool respool_;
-};
-
 struct WFGlobalSettings WFGlobal::settings_ = GLOBAL_SETTINGS_DEFAULT;
-RouteManager WFGlobal::route_manager_;
-DnsCache WFGlobal::dns_cache_;
-WFDnsResolver WFGlobal::dns_resolver_;
-WFNameService WFGlobal::name_service_(&WFGlobal::dns_resolver_);
 
 bool WFGlobal::is_scheduler_created()
 {
@@ -609,37 +323,6 @@ Executor *WFGlobal::get_compute_executor()
 IOService *WFGlobal::get_io_service()
 {
 	return __CommManager::get_instance()->get_io_service();
-}
-
-ExecQueue *WFGlobal::get_dns_queue()
-{
-	return __ThreadDnsManager::get_instance()->get_dns_queue();
-}
-
-Executor *WFGlobal::get_dns_executor()
-{
-	return __ThreadDnsManager::get_instance()->get_dns_executor();
-}
-
-WFDnsClient *WFGlobal::get_dns_client()
-{
-	return __DnsClientManager::get_instance()->get_dns_client();
-}
-
-WFResourcePool *WFGlobal::get_dns_respool()
-{
-	return __DnsClientManager::get_instance()->get_dns_respool();
-}
-
-const char *WFGlobal::get_default_port(const std::string& scheme)
-{
-	return __WFGlobal::get_instance()->get_default_port(scheme);
-}
-
-void WFGlobal::register_scheme_port(const std::string& scheme,
-									unsigned short port)
-{
-	__WFGlobal::get_instance()->register_scheme_port(scheme, port);
 }
 
 int WFGlobal::sync_operation_begin()
@@ -735,16 +418,16 @@ static inline const char *__get_task_error_string(int error)
 
     case WFT_ERR_KAFKA_SASL_DISALLOWED:
         return "Kafka sasl disallowed";
-	
+
     case WFT_ERR_KAFKA_ARRANGE_FAILED:
         return "Kafka arrange failed";
-	
+
     case WFT_ERR_KAFKA_LIST_OFFSETS_FAILED:
         return "Kafka list offsets failed";
 
     case WFT_ERR_KAFKA_CGROUP_ASSIGN_FAILED:
         return "Kafka cgroup assign failed";
-			
+
 	case WFT_ERR_CONSUL_API_UNKNOWN:
 		return "Consul api type unknown";
 
@@ -773,9 +456,6 @@ const char *WFGlobal::get_error_string(int state, int error)
 
 	case WFT_STATE_SYS_ERROR:
 		return strerror(error);
-
-	case WFT_STATE_DNS_ERROR:
-		return gai_strerror(error);
 
 	case WFT_STATE_TASK_ERROR:
 		return __get_task_error_string(error);

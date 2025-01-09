@@ -39,39 +39,6 @@ void WFFacilities::go(const std::string& queue_name, FUNC&& func, ARGS&&... args
 	WFTaskFactory::create_go_task(queue_name, std::forward<FUNC>(func), std::forward<ARGS>(args)...)->start();
 }
 
-template<class REQ, class RESP>
-WFFacilities::WFNetworkResult<RESP> WFFacilities::request(enum TransportType type, const std::string& url, REQ&& req, int retry_max)
-{
-	return async_request<REQ, RESP>(type, url, std::forward<REQ>(req), retry_max).get();
-}
-
-template<class REQ, class RESP>
-WFFuture<WFFacilities::WFNetworkResult<RESP>> WFFacilities::async_request(enum TransportType type, const std::string& url, REQ&& req, int retry_max)
-{
-	ParsedURI uri;
-	auto *pr = new WFPromise<WFNetworkResult<RESP>>();
-	auto fr = pr->get_future();
-	auto *task = new WFComplexClientTask<REQ, RESP>(retry_max, [pr](WFNetworkTask<REQ, RESP> *task) {
-		WFNetworkResult<RESP> res;
-
-		res.seqid = task->get_task_seq();
-		res.task_state = task->get_state();
-		res.task_error = task->get_error();
-		if (res.task_state == WFT_STATE_SUCCESS)
-			res.resp = std::move(*task->get_resp());
-
-		pr->set_value(std::move(res));
-		delete pr;
-	});
-
-	URIParser::parse(url, uri);
-	task->init(std::move(uri));
-	task->set_transport_type(type);
-	*task->get_req() = std::forward<REQ>(req);
-	task->start();
-	return fr;
-}
-
 inline WFFuture<ssize_t> WFFacilities::async_pread(int fd, void *buf, size_t count, off_t offset)
 {
 	auto *pr = new WFPromise<ssize_t>();

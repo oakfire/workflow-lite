@@ -22,7 +22,6 @@
 #include <chrono>
 #include <gtest/gtest.h>
 #include "workflow/WFFacilities.h"
-#include "workflow/HttpUtil.h"
 
 #define GET_CURRENT_MICRO	std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()
 
@@ -40,48 +39,6 @@ TEST(facilities_unittest, async_usleep)
 	WFFacilities::async_usleep(1000000).wait();
 	int64_t ed = GET_CURRENT_MICRO;
 	EXPECT_LE(ed - st, 10000000) << "async_usleep too slow";
-}
-
-TEST(facilities_unittest, request)
-{
-	protocol::HttpRequest req;
-	req.set_method(HttpMethodGet);
-	req.set_http_version("HTTP/1.1");
-	req.set_request_uri("/");
-	req.set_header_pair("Host", "github.com");
-	auto res = WFFacilities::request<protocol::HttpRequest, protocol::HttpResponse>(TT_TCP, "http://github.com", std::move(req), 0);
-	//EXPECT_EQ(res.task_state, WFT_STATE_SUCCESS);
-	if (res.task_state == WFT_STATE_SUCCESS)
-	{
-		auto code = atoi(res.resp.get_status_code());
-		EXPECT_TRUE(code == HttpStatusOK ||
-					code == HttpStatusMovedPermanently ||
-					code == HttpStatusFound ||
-					code == HttpStatusSeeOther ||
-					code == HttpStatusTemporaryRedirect ||
-					code == HttpStatusPermanentRedirect);
-	}
-}
-
-TEST(facilities_unittest, async_request)
-{
-	protocol::HttpRequest req;
-	req.set_method(HttpMethodGet);
-	req.set_http_version("HTTP/1.1");
-	req.set_request_uri("/");
-	req.set_header_pair("Host", "github.com");
-	auto res = WFFacilities::request<protocol::HttpRequest, protocol::HttpResponse>(TT_TCP, "http://github.com", std::move(req), 0);
-	//EXPECT_EQ(res.task_state, WFT_STATE_SUCCESS);
-	if (res.task_state == WFT_STATE_SUCCESS)
-	{
-		auto code = atoi(res.resp.get_status_code());
-		EXPECT_TRUE(code == HttpStatusOK ||
-					code == HttpStatusMovedPermanently ||
-					code == HttpStatusFound ||
-					code == HttpStatusSeeOther ||
-					code == HttpStatusTemporaryRedirect ||
-					code == HttpStatusPermanentRedirect);
-	}
 }
 
 TEST(facilities_unittest, fileIO)
