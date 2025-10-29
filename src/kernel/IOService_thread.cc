@@ -80,7 +80,7 @@ void IOSession::prep_fsync(int fd)
 	this->op = IO_CMD_FSYNC;
 }
 
-void IOSession::prep_fdsync(int fd)
+void IOSession::prep_fdatasync(int fd)
 {
 	this->fd = fd;
 	this->op = IO_CMD_FDSYNC;
@@ -103,6 +103,12 @@ int IOService::init(int maxevents)
 		errno = ret;
 		return -1;
 	}
+
+	p = dlsym(RTLD_DEFAULT, "fdatasync");
+	if (p)
+		this->fdatasync = (int (*)(int))p;
+	else
+		this->fdatasync = fsync;
 
 	p = dlsym(RTLD_DEFAULT, "preadv");
 	if (p)
@@ -227,7 +233,7 @@ void *IOService::io_routine(void *arg)
 		ret = fsync(fd);
 		break;
 	case IO_CMD_FDSYNC:
-		ret = fdatasync(fd);
+		ret = service->fdatasync(fd);
 		break;
 	case IO_CMD_PREADV:
 		ret = service->preadv(fd, (const struct iovec *)session->buf,
